@@ -1,6 +1,6 @@
 substitutions:
-  name: ds18b20-esp32
-  friendly_name: "DS18B20 Temperatur"
+  name: esp-pool-v2
+  friendly_name: esp-pool-v2
 
 esphome:
   name: ${name}
@@ -9,7 +9,7 @@ esphome:
 esp32:
   board: esp32dev
   framework:
-    type: arduino
+    type: esp-idf
 
 external_components:
   - source: github://Lere-q/dallas-patched
@@ -17,21 +17,24 @@ external_components:
     refresh: 0s
 
 logger:
-  baud_rate: 115200
+
+api:
+  encryption:
+    key: "BG4fJUKqFmPL3ozj4svfVH7UC8CY8bN1So14EZOQrKc="
+
+ota:
+  - platform: esphome
+    password: "dbf0fff38d82c8bcf266180cd9de3b78"
 
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
-api:
-  encryption:
-    key: !secret api_key
+  ap:
+    ssid: "Esp-Pool-V2 Fallback Hotspot"
+    password: "nefphcfzwYjo"
 
-ota:
-  password: !secret ota_password
-
-web_server:
-  port: 80
+captive_portal:
 
 sensor:
   - platform: dallas_patched
@@ -39,13 +42,12 @@ sensor:
       number: 16
       mode: input_pullup
     name: "Temperatur"
-    id: temp_sensor
     unit_of_measurement: "°C"
     accuracy_decimals: 2
     device_class: temperature
     state_class: measurement
     update_interval: 15s
     filters:
-      - sliding_window_moving_average:
+      - moving_average:
           window_size: 3
           send_every: 1
