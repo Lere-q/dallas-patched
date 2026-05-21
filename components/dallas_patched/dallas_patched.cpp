@@ -25,6 +25,7 @@ bool DallasPatchedSensor::reset() {
   pin_->digital_write(false);
   pin_->pin_mode(gpio::FLAG_OUTPUT);
   delayMicroseconds(480);
+  pin_->digital_write(true);
   pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
   delayMicroseconds(70);
   bool presence = !pin_->digital_read();
@@ -39,12 +40,12 @@ void DallasPatchedSensor::write_bit(uint8_t v) {
     delayMicroseconds(10);
     pin_->digital_write(true);
     delayMicroseconds(55);
-    pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
   } else {
     pin_->digital_write(false);
     pin_->pin_mode(gpio::FLAG_OUTPUT);
     delayMicroseconds(65);
-    pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
+    pin_->digital_write(true);
+    delayMicroseconds(5);
   }
 }
 
@@ -53,9 +54,9 @@ uint8_t DallasPatchedSensor::read_bit() {
   pin_->pin_mode(gpio::FLAG_OUTPUT);
   delayMicroseconds(3);
   pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
-  delayMicroseconds(30);
+  delayMicroseconds(35);
   uint8_t r = pin_->digital_read();
-  delayMicroseconds(27);
+  delayMicroseconds(25);
   return r;
 }
 
@@ -96,12 +97,13 @@ bool DallasPatchedSensor::read_scratchpad(uint8_t *data) {
     data[i] = read_byte();
   }
   pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
-  return crc8(data, 8) == data[8];
+  uint8_t crc = crc8(data, 8);
+  return crc == data[8];
 }
 
 void DallasPatchedSensor::update() {
   if (!reset()) {
-    ESP_LOGW(TAG, "Kein DS18B20 gefunden (Presence)");
+    ESP_LOGW(TAG, "Kein DS18B20 (Presence)");
     publish_state(NAN);
     return;
   }
