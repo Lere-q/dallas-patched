@@ -1,20 +1,14 @@
 # Dallas Patched – DS18B20 mit internem ESP32 Pullup
 
-ESPHome External Component für DS18B20 am ESP32 Pin 16 **ohne externen Pullup**.
+DS18B20 am ESP32 Pin 16 **ohne externen 4,7kΩ Pullup**. Der interne Pullup (ca. 45kΩ)
+ist eigentlich zu schwach – dieses Repository patcht das read_bit-Timing von 10μs auf **30μs**,
+damit die Leitung sicher HIGH wird.
 
-## Problem
-Der interne Pullup (ca. 45kΩ) ist zu schwach für das Standard-1-Wire-Timing.
-Der DS18B20 antwortet auf den Reset-Puls, aber Datenbits werden falsch gelesen.
-
-## Fix
-`read_bit()` Wartezeit von 10μs → **30μs** verlängert, damit die Leitung
-bei schwachem Pullup sicher HIGH wird.
-
-## Verwendung
+## ESPHome (Home Assistant)
 
 ```yaml
 external_components:
-  - source: github://DEIN_USER/dallas-patched
+  - source: github://Lere-q/dallas-patched
     components: [dallas_patched]
 
 sensor:
@@ -26,8 +20,43 @@ sensor:
     update_interval: 15s
 ```
 
-## Test
+Komplette Beispiel-Config: [`example-esp32-ds18b20.yaml`](example-esp32-ds18b20.yaml)
+
+## Alternativ: Arduino + MQTT
+
+Firmware: [`arduino/esp32_pin16.ino`](arduino/esp32_pin16.ino) (WiFi + MQTT + DS18B20)
+
+### Flashen
 ```bash
-screen /dev/ttyUSB0 115200
+arduino-cli lib install "DallasTemperature" "OneWire" "PubSubClient"
+arduino-cli compile --fqbn esp32:esp32:esp32 arduino/
+arduino-cli upload -p /dev/ttyUSB0 --fqbn esp32:esp32:esp32 arduino/
 ```
-Nach ~800ms sollte `[dallas_patched] Temp: 23.50 C` erscheinen.
+
+### Wichtig: OneWire patchen
+```bash
+# read_bit Timing von 10μs → 30μs ändern:
+sed -i 's/delayMicroseconds(10);/delayMicroseconds(30);/' ~/Arduino/libraries/OneWire/OneWire.cpp
+```
+
+## Desktop-GUI (Alternative zu HA)
+
+```bash
+pip install pyserial matplotlib
+python3 tempgraph.py -p /dev/ttyUSB0
+```
+Darkmode Live-Graph mit aktuell/min/max/mittel.
+
+## Hardware
+
+```
+ESP32 Pin 16 ─── DS18B20 DATA
+ESP32 3.3V   ─── DS18B20 VCC
+ESP32 GND    ─── DS18B20 GND
+
+(Kein externer Pullup nötig!)
+```
+
+## Lizenz
+
+MIT
