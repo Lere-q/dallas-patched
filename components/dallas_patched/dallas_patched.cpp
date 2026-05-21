@@ -1,18 +1,31 @@
 #include "dallas_patched.h"
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
+#include <driver/gpio.h>
 
 namespace esphome {
 namespace dallas_patched {
 
 static const char *TAG = "dallas_patched";
-
 static const uint8_t CMD_CONVERT = 0x44;
 static const uint8_t CMD_READ_SCRATCH = 0xBE;
 static const uint8_t CMD_SKIP_ROM = 0xCC;
 
+static gpio_num_t gpio;
+static uint32_t pin_mask;
+
 void DallasPatchedSensor::setup() {
-  pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
+  gpio = (gpio_num_t)pin_->get_pin();
+  pin_mask = (1ULL << (uint8_t)gpio);
+
+  gpio_config_t cfg = {};
+  cfg.pin_bit_mask = pin_mask;
+  cfg.mode = GPIO_MODE_INPUT_OUTPUT_OD;
+  cfg.pull_up_en = GPIO_PULLUP_ENABLE;
+  cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  cfg.intr_type = GPIO_INTR_DISABLE;
+  gpio_config(&cfg);
+  gpio_set_level(gpio, 1);
 }
 
 void DallasPatchedSensor::dump_config() {
@@ -21,41 +34,48 @@ void DallasPatchedSensor::dump_config() {
   LOG_UPDATE_INTERVAL(this);
 }
 
+static inline void IRAM_ATTR drive_low() {
+  GPIO.out_w1tc = pin_mask;
+}
+
+static inline void IRAM_ATTR release() {
+  GPIO.out_w1ts = pin_mask;
+}
+
+static inline bool IRAM_ATTR read_pin() {
+  return (GPIO.in & pin_mask) != 0;
+}
+
 bool DallasPatchedSensor::reset() {
-  pin_->digital_write(false);
-  pin_->pin_mode(gpio::FLAG_OUTPUT);
+  drive_low();
   delayMicroseconds(480);
-  pin_->digital_write(true);
-  pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
+  release();
   delayMicroseconds(70);
-  bool presence = !pin_->digital_read();
+  bool presence = !read_pin();
   delayMicroseconds(410);
   return presence;
 }
 
 void DallasPatchedSensor::write_bit(uint8_t v) {
   if (v) {
-    pin_->digital_write(false);
-    pin_->pin_mode(gpio::FLAG_OUTPUT);
+    drive_low();
     delayMicroseconds(10);
-    pin_->digital_write(true);
+    release();
     delayMicroseconds(55);
   } else {
-    pin_->digital_write(false);
-    pin_->pin_mode(gpio::FLAG_OUTPUT);
+    drive_low();
     delayMicroseconds(65);
-    pin_->digital_write(true);
+    release();
     delayMicroseconds(5);
   }
 }
 
 uint8_t DallasPatchedSensor::read_bit() {
-  pin_->digital_write(false);
-  pin_->pin_mode(gpio::FLAG_OUTPUT);
+  drive_low();
   delayMicroseconds(3);
-  pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
+  release();
   delayMicroseconds(35);
-  uint8_t r = pin_->digital_read();
+  uint8_t r = read_pin();
   delayMicroseconds(25);
   return r;
 }
@@ -96,9 +116,7 @@ bool DallasPatchedSensor::read_scratchpad(uint8_t *data) {
   for (uint8_t i = 0; i < 9; i++) {
     data[i] = read_byte();
   }
-  pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
-  uint8_t crc = crc8(data, 8);
-  return crc == data[8];
+  return crc8(data, 8) == data[8];
 }
 
 void DallasPatchedSensor::update() {
@@ -109,7 +127,6 @@ void DallasPatchedSensor::update() {
   }
   write_byte(CMD_SKIP_ROM);
   write_byte(CMD_CONVERT);
-  pin_->pin_mode(gpio::FLAG_INPUT | gpio::FLAG_PULLUP);
   delay(800);
 
   uint8_t data[9];
